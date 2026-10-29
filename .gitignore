@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+data/
+*.sqlite*
+*.db*
+*.log
+desktop_connection.json
+bridge_state.json
+*_config.json
+dist/
+build/
+*.zip

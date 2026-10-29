@@ -1,0 +1,126 @@
+{
+  "enabled": {
+    "description": "启用 CODEX通知助手",
+    "type": "bool",
+    "default": true
+  },
+  "enable_codex_reply": {
+    "description": "开启 Codex 回复",
+    "type": "bool", "default": false,
+    "hint": "仅绑定用户可引用带回复标记的通知发送指令。无引用或目标不明确时不会发送；开启后的新通知才带标记。"
+  },
+  "enable_codex_create": {
+    "description": "开启 Codex 窗口新建",
+    "type": "bool", "default": false,
+    "hint": "仅绑定用户可发送 /新建Codex 口令 任务指令，创建独立的本地聊天。"
+  },
+  "codex_create_passphrase": {
+    "description": "新建 Codex 窗口口令",
+    "type": "string", "default": "",
+    "hint": "请自行设置非空且不含空格的口令。口令不能代替绑定用户身份校验。"
+  },
+  "codex_command_interval_seconds": {
+    "description": "Codex 两次指令最小间隔（秒）",
+    "type": "int", "default": 10,
+    "hint": "新建和续聊共用绑定用户的发送间隔，范围1至3600秒。"
+  },
+  "allow_codex_running_reply": {
+    "description": "允许向运行中的 Codex 聊天发送指令",
+    "type": "bool", "default": false,
+    "hint": "开启后交由桌面原生发送接口处理追加或排队，不主动中断任务。关闭时运行中的目标会被拒绝。"
+  },
+  "listen_host": {
+    "description": "本地监听地址",
+    "type": "string",
+    "default": "127.0.0.1",
+    "hint": "为安全起见请保持 127.0.0.1，不要暴露到局域网或公网。"
+  },
+  "listen_port": {
+    "description": "本地监听端口",
+    "type": "int",
+    "default": 6198
+  },
+  "target_umo": {
+    "description": "发送给谁（群聊或私信 UMO）",
+    "type": "string",
+    "default": "",
+    "hint": "无需手动填写：验证码认证后会自动显示。该栏是绑定状态的镜像，请使用绑定暗号或 /Codex通知 解绑 修改。"
+  },
+  "enable_phrase_binding": {
+    "description": "启用暗号绑定当前会话",
+    "type": "bool",
+    "default": true
+  },
+  "binding_phrase": {
+    "description": "绑定暗号",
+    "type": "string",
+    "default": "绑定CODEX通知到当前会话",
+    "hint": "用户在目标群聊或私聊发送这句话后，插件会生成一次性验证码。"
+  },
+  "bind_verification_code": {
+    "description": "本次绑定的4位验证码",
+    "type": "string",
+    "default": "----",
+    "hint": "由插件自动生成，请勿手动修改。验证码只对发起绑定的用户和会话有效，成功或过期后自动作废。"
+  },
+  "verification_timeout_seconds": {
+    "description": "验证码有效期（秒）",
+    "type": "int",
+    "default": 300
+  },
+  "verification_max_attempts": {
+    "description": "验证码最多尝试次数",
+    "type": "int",
+    "default": 3
+  },
+  "message_prefix": {
+    "description": "任务完成提示文字",
+    "type": "string",
+    "default": "✅ CODEX 任务已完成"
+  },
+  "include_completion_notice": {
+    "description": "回复包含：提示任务已完成",
+    "type": "bool",
+    "default": true
+  },
+  "include_task_name": {
+    "description": "回复包含：任务名",
+    "type": "bool",
+    "default": true
+  },
+  "include_task_link": {
+    "description": "回复包含：任务连接（地址）",
+    "type": "bool",
+    "default": true,
+    "hint": "根据 Codex 通知中的任务 ID 生成 codex:// 本地任务地址。"
+  },
+  "include_result": {
+    "description": "回复包含：结果",
+    "type": "bool",
+    "default": true
+  },
+  "include_current_quota": {
+    "description": "回复包含：当前额度",
+    "type": "bool",
+    "default": true,
+    "hint": "在通知末尾显示最近记录的剩余额度和重置时间（北京时间），例如 72%/5小时 13:58，66%/周 11-04 15:11。百分比为剩余量；记录已到重置时间但尚未更新时显示待刷新。"
+  },
+  "codex_notifications_in_context": {
+    "description": "BOT 上下文可见 Codex 通知",
+    "type": "bool",
+    "default": false,
+    "hint": "将成功发送到绑定会话的通知保存在本地，并在该会话后续请求中提供给 BOT。最多保留最近8条、24小时，每条最多2400字；关闭后不提供这些记录。仅限绑定会话，不跨群或跨私聊共享。"
+  },
+  "summary_max_chars": {
+    "description": "结果最大字符数",
+    "type": "int",
+    "default": 500
+  },
+  "completion_grace_seconds": {
+    "description": "最终回复完成后的发送缓冲（秒）",
+    "type": "int",
+    "default": 10,
+    "hint": "核对本机会话完成记录后再等待此时长发送。用于缓解桌面界面显示延迟，无法保证与最后一个字的渲染完全同步。修改后重载插件生效。"
+  }
+}
+

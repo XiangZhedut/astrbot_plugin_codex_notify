@@ -1,0 +1,20 @@
+name: astrbot_plugin_codex_notify
+display_name: Codex 交互与通知助手
+short_desc: 在 QQ 中引用通知续聊 Codex、口令新建聊天，并接收任务与额度提醒
+desc: >-
+  通过 QQ 引用已登记的通知，继续指定的 Codex 桌面聊天；支持绑定用户通过口令新建聊天，
+  新建与续聊共用发送间隔，并可配置运行中发送。附带完成、失败、待回复及额度重置提醒。
+  当前远控为 Windows 同机实验性集成，依赖 Codex 桌面内部接口和本地记录格式，非 OpenAI 官方插件。
+version: 2.0.1
+author: XiangZhedut
+repo: https://github.com/XiangZhedut/astrbot_plugin_codex_notify
+astrbot_version: ">=4.29.3,<5"
+support_platforms:
+  - qq_official
+tags:
+  - Codex
+  - 远程交互
+  - QQ
+  - 通知
+  - 主动消息
+
