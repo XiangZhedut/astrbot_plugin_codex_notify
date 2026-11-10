@@ -17,6 +17,7 @@ ROOT_FILES = {
     "completion_monitor.py",
     "desktop_client.py",
     "remote_control.py",
+    "file_transfer.py",
     "_conf_schema.json",
     "metadata.yaml",
     "README.md",
@@ -46,6 +47,8 @@ def build(root: Path, output: Path):
         "enable_codex_create",
         "allow_codex_running_reply",
         "codex_notifications_in_context",
+        "enable_codex_file_upload",
+        "enable_codex_file_receive",
     ):
         if config[key]["default"] is not False:
             raise ValueError(f"Expected explicit opt-in: {key}")

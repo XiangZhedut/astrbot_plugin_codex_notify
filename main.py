@@ -13,7 +13,7 @@ from urllib.parse import quote
 from aiohttp import web
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Plain, Reply
+from astrbot.api.message_components import File, Plain, Reply
 from astrbot.api.star import Context, Star, StarTools, register
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
@@ -21,6 +21,7 @@ from astrbot.core.platform.message_type import MessageType
 
 from .completion_monitor import CompletionMonitor
 from .desktop_client import DesktopClient
+from .file_transfer import FileTransfer
 from .remote_control import MARKER, RemoteControl
 
 PLUGIN_NAME = "astrbot_plugin_codex_notify"
@@ -153,7 +154,7 @@ def format_notification(
     "codex_notify",
     "XiangZhedut",
     "通过 QQ 续聊与新建 Codex 聊天，并接收任务和额度提醒",
-    "2.0.1",
+    "2.1.0",
 )
 class CodexNotifyPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
@@ -173,6 +174,7 @@ class CodexNotifyPlugin(Star):
         self._remote_control = RemoteControl(
             self.data_dir / "remote_control.sqlite", DesktopClient(), config
         )
+        self._files = FileTransfer(self.data_dir / "files")
 
     def _read_state(self) -> dict[str, Any]:
         try:
@@ -290,9 +292,15 @@ class CodexNotifyPlugin(Star):
                 and hasattr(self._completion_monitor, "_alert"),
                 "quota_reset_notifications": self._completion_monitor is not None
                 and hasattr(self._completion_monitor, "_quota_due"),
-                "plugin_version": "2.0.1",
+                "plugin_version": "2.1.0",
                 "codex_reply_enabled": bool(self.config.get("enable_codex_reply", False)),
                 "codex_create_enabled": bool(self.config.get("enable_codex_create", False)),
+                "codex_file_upload_enabled": bool(
+                    self.config.get("enable_codex_file_upload", False)
+                ),
+                "codex_file_receive_enabled": bool(
+                    self.config.get("enable_codex_file_receive", False)
+                ),
             }
         )
 
@@ -374,6 +382,13 @@ class CodexNotifyPlugin(Star):
                                 self._notification_text(payload),
                                 thread_id=tid if tid and not tid.startswith("__") else None,
                             )
+                            if delivered and self.config.get("enable_codex_file_receive", False):
+                                try:
+                                    await asyncio.to_thread(self._files.queue, target, payload)
+                                except Exception:
+                                    logger.warning(
+                                        "[CodexNotify] 文件收集失败，请在电脑查看任务文件"
+                                    )
                         except Exception:
                             delivered = False
                             logger.exception("[CodexNotify] 完成通知发送失败，将重试")
@@ -384,6 +399,8 @@ class CodexNotifyPlugin(Star):
                             + " kind="
                             + str(payload.get("notification-kind") or "completed")
                         )
+                    if self.config.get("enable_codex_file_receive", False):
+                        await self._files.drain(target, self._send_file, self._file_notice)
                 await asyncio.sleep(2)
             except asyncio.CancelledError:
                 return
@@ -413,7 +430,14 @@ class CodexNotifyPlugin(Star):
     async def _send(self, target: str, text: str, thread_id: str | None = None) -> bool:
         route = None
         remote = getattr(self, "_remote_control", None)
-        if thread_id and remote and bool(self.config.get("enable_codex_reply", False)):
+        if (
+            thread_id
+            and remote
+            and (
+                self.config.get("enable_codex_reply", False)
+                or self.config.get("enable_codex_file_upload", False)
+            )
+        ):
             route = remote.issue_route(target, thread_id)
             text += "\n【Codex回复标记：" + route + "】"
         if bool(self.config.get("include_current_quota", True)):
@@ -447,6 +471,17 @@ class CodexNotifyPlugin(Star):
                 logger.warning("[CodexNotify] 通知已发送，但上下文记录保存失败")
         return delivered
 
+    async def _send_file(self, target, path, name):
+        self._prepare_qq_group_proactive_send(target)
+        return bool(
+            await self.context.send_message(
+                target, MessageChain(chain=[File(name=name, file=path)])
+            )
+        )
+
+    async def _file_notice(self, target, text):
+        return bool(await self.context.send_message(target, MessageChain(chain=[Plain(text)])))
+
     def _remember_binding_owner(self, event):
         state = self._read_state()
         state["binding_owner"] = str(event.get_sender_id())
@@ -460,6 +495,84 @@ class CodexNotifyPlugin(Star):
         if not owner and ":FriendMessage:" in event.unified_msg_origin:
             owner = event.unified_msg_origin.rsplit(":", 1)[-1]
         return bool(owner) and secrets.compare_digest(owner, str(event.get_sender_id()))
+
+    @filter.event_message_type(filter.EventMessageType.ALL, priority=1200)
+    async def codex_file_command(self, event: AstrMessageEvent):
+        if not self.config.get("enabled", True):
+            return
+        messages = event.get_messages()
+        text = "".join(m.text for m in messages if isinstance(m, Plain)).strip()
+        command = text.split(maxsplit=1)[0] if text else ""
+        commands = {"/上传Codex", "/发送Codex", "/取消Codex上传"}
+        attachments = [m for m in messages if isinstance(m, File)]
+        # Ordinary file messages continue through AstrBot unless upload is enabled
+        # and the bound owner is in a selected upload session.
+        owner = self._remote_user_allowed(event)
+        selected = (
+            owner and (str(event.get_sender_id()), event.unified_msg_origin) in self._files.sessions
+        )
+        if command not in commands and not (attachments and selected):
+            return
+        if not owner:
+            yield event.plain_result("仅允许绑定通知的用户在原绑定会话传文件。").stop_event()
+            return
+        if not self.config.get("enable_codex_file_upload", False):
+            self._files.cancel(str(event.get_sender_id()), event.unified_msg_origin)
+            yield event.plain_result("Codex 文件上传未开启。").stop_event()
+            return
+        user, target = str(event.get_sender_id()), event.unified_msg_origin
+        try:
+            async with self._files.lock:
+                if command == "/上传Codex":
+                    quoted = "\n".join(
+                        str(m.message_str or m.text or "") for m in messages if isinstance(m, Reply)
+                    )
+                    thread = self._files.select(user, target, quoted, self._remote_control)
+                    response = (
+                        f"已选择 Codex 聊天：{thread}\n请在5分钟内发送文件，"
+                        "最后发送 /发送Codex 处理要求；可用 /取消Codex上传 取消。"
+                        "每批最多10个文件，单个20 MiB，总计50 MiB。"
+                    )
+                elif command == "/取消Codex上传":
+                    self._files.cancel(user, target)
+                    response = "已取消当前 Codex 文件上传。"
+                elif command == "/发送Codex":
+                    instruction = text[len(command) :].strip()
+                    quoted, prompt = self._files.prompt(user, target, instruction)
+                    try:
+                        thread = await self._remote_control.dispatch(
+                            user=user,
+                            target=target,
+                            message_id=str(getattr(event.message_obj, "message_id", "") or ""),
+                            prompt=prompt,
+                            quoted=quoted,
+                            file_upload=True,
+                        )
+                    except ValueError:
+                        raise
+                    except Exception:
+                        # A timeout can follow an accepted write; keep files on
+                        # disk, but require a fresh selection before another send.
+                        self._files.cancel(user, target, delete=False)
+                        raise
+                    self._files.cancel(user, target, delete=False)
+                    response = f"已向 Codex 聊天 {thread} 提交文件和指令。"
+                else:
+                    count = await self._files.stage(
+                        user,
+                        target,
+                        str(getattr(event.message_obj, "message_id", "") or ""),
+                        attachments,
+                    )
+                    response = f"已暂存 {count} 个文件；继续发送文件，或发送 /发送Codex 处理要求。"
+            yield event.plain_result(response).stop_event()
+        except Exception as exc:
+            message = (
+                str(exc)
+                if isinstance(exc, ValueError)
+                else ("文件操作未确认成功，请检查桌面或重新发送文件；提交指令不会自动重发。")
+            )
+            yield event.plain_result(message).stop_event()
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=1100)
     async def codex_remote_command(self, event: AstrMessageEvent):

@@ -9,6 +9,16 @@
     "type": "bool", "default": false,
     "hint": "仅绑定用户可引用带回复标记的通知发送指令。无引用或目标不明确时不会发送；开启后的新通知才带标记。"
   },
+  "enable_codex_file_upload": {
+    "description": "开启上传文件给 Codex",
+    "type": "bool", "default": false,
+    "hint": "仅绑定用户：引用目标通知发送 /上传Codex，5分钟内发送文件，再发送 /发送Codex 处理要求。可用 /取消Codex上传 取消。单个20 MiB，每批10个、总计50 MiB。提交与新建/续聊共用间隔及运行中发送限制。"
+  },
+  "enable_codex_file_receive": {
+    "description": "开启接收 Codex 生成的文件",
+    "type": "bool", "default": false,
+    "hint": "任务完成后发送最终回复中明确链接的本机工作目录内文件，每轮最多10个、单个20 MiB。不扫描目录，不支持远程沙箱链接；QQ是否允许文件传输取决于平台权限。"
+  },
   "enable_codex_create": {
     "description": "开启 Codex 窗口新建",
     "type": "bool", "default": false,

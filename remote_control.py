@@ -68,7 +68,16 @@ class RemoteControl:
         return row[0]
 
     async def dispatch(
-        self, *, user, target, message_id, prompt, quoted="", create=False, passphrase=""
+        self,
+        *,
+        user,
+        target,
+        message_id,
+        prompt,
+        quoted="",
+        create=False,
+        passphrase="",
+        file_upload=False,
     ):
         if not message_id:
             raise ValueError("平台未提供消息 ID，无法防止重复发送，已拒绝。")
@@ -85,6 +94,9 @@ class RemoteControl:
                     expected.encode("utf-8"), passphrase.encode("utf-8")
                 ):
                     raise ValueError("新建口令未设置或不正确。")
+            elif file_upload:
+                if not self.config.get("enable_codex_file_upload", False):
+                    raise ValueError("Codex 文件上传未开启。")
             elif not self.config.get("enable_codex_reply", False):
                 raise ValueError("Codex 回复功能未开启。")
             thread = None if create else self.find_route(target, quoted)

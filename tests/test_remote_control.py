@@ -110,6 +110,16 @@ class RemoteTests(unittest.IsolatedAsyncioTestCase):
         args = {**self.args, "create": True, "passphrase": "星星口令"}
         self.assertEqual(await self.service.dispatch(**args), "thread-new")
 
+    async def test_upload_switch_independent_and_shares_cooldown(self):
+        self.config["enable_codex_reply"] = False
+        with self.assertRaisesRegex(ValueError, "上传未开启"):
+            await self.service.dispatch(**self.args, file_upload=True)
+        self.config["enable_codex_file_upload"] = True
+        await self.service.dispatch(**self.args, file_upload=True)
+        self.config["enable_codex_reply"] = True
+        with self.assertRaisesRegex(ValueError, "频繁"):
+            await self.service.dispatch(**{**self.args, "message_id": "m2"})
+
     async def test_uncertain_write_is_not_automatically_retried_after_restart(self):
         def timeout(tool, args, **kw):
             if tool == "send_message_to_thread":
