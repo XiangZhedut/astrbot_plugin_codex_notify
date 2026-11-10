@@ -18,6 +18,7 @@ ROOT_FILES = {
     "desktop_client.py",
     "remote_control.py",
     "file_transfer.py",
+    "notification_context.py",
     "_conf_schema.json",
     "metadata.yaml",
     "README.md",

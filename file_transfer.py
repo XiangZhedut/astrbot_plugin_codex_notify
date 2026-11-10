@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import ipaddress
+import logging
 import re
 import socket
 import sqlite3
@@ -52,9 +53,23 @@ def safe_name(name):
     return "file_" + (name.strip(" .")[:120] or "file")
 
 
+def canonical_path(value, *, strict=False):
+    raw = str(value)
+    if raw.startswith("\\\\?\\UNC\\"):
+        raw = "\\\\" + raw[8:]
+    elif raw.startswith("\\\\?\\"):
+        raw = raw[4:]
+    resolved = str(Path(raw).resolve(strict=strict))
+    if resolved.startswith("\\\\?\\UNC\\"):
+        resolved = "\\\\" + resolved[8:]
+    elif resolved.startswith("\\\\?\\"):
+        resolved = resolved[4:]
+    return Path(resolved)
+
+
 def linked_files(text, root):
     """Only explicit local links contained in the resolved thread workspace."""
-    root = Path(root).resolve()
+    root = canonical_path(root)
     found = []
     for match in LINK.finditer(text):
         raw = unquote(match.group(1) or match.group(2))
@@ -72,7 +87,7 @@ def linked_files(text, root):
         if not path.is_absolute():
             path = root / path
         try:
-            path = path.resolve(strict=True)
+            path = canonical_path(path, strict=True)
             relative = path.relative_to(root)
             if any(p.startswith(".") for p in relative.parts):
                 continue
@@ -269,8 +284,11 @@ class FileTransfer:
                     ):
                         raise RuntimeError("Platform did not confirm delivery")
                 final = "sent"
-            except Exception:
+            except Exception as exc:
                 # Do not repeatedly send an attachment after an uncertain result.
+                logging.getLogger(__name__).warning(
+                    "File delivery unconfirmed name=%s error=%s", name, type(exc).__name__
+                )
                 final = "uncertain" if status == "pending" else "failed"
             with closing(sqlite3.connect(self.db_path)) as db, db:
                 db.execute("UPDATE outbox SET status=? WHERE key=?", (final, key))

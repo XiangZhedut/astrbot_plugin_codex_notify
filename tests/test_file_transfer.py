@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sqlite3
 import tempfile
 import unittest
@@ -53,6 +54,16 @@ class FileTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(linked_files(text, self.workspace), [self.artifact])
         self.assertEqual(linked_files("报告已保存", self.workspace), [])
+
+    @unittest.skipUnless(os.name == "nt", "Windows extended paths")
+    def test_extended_windows_workspace_accepts_normal_link(self):
+        root = "\\\\?\\" + str(self.workspace)
+        self.assertEqual(
+            linked_files(self.payload["last-assistant-message"], root), [self.artifact]
+        )
+        outside = self.root / "private.txt"
+        outside.touch()
+        self.assertEqual(linked_files(f"[private](<{outside}>)", root), [])
 
     def test_session_requires_selection_owner_target_and_expiry(self):
         with self.assertRaises(ValueError):
@@ -218,3 +229,30 @@ class FileTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("未确认", results[0].text)
         self.assertEqual(self.service.sessions, {})
         self.assertTrue(uploaded.exists())
+
+    async def test_qq_file_send_requires_native_receipt(self):
+        from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+            QQOfficialMessageEvent,
+        )
+
+        plugin = self.plugin()
+        platform = SimpleNamespace(meta=lambda: SimpleNamespace(name="qq_official"), client=Mock())
+        plugin.context = SimpleNamespace(get_platform_inst=lambda _: platform)
+        with (
+            patch.object(
+                QQOfficialMessageEvent,
+                "upload_group_and_c2c_media",
+                AsyncMock(return_value={"file_info": "test"}),
+            ),
+            patch.object(
+                QQOfficialMessageEvent,
+                "post_c2c_message",
+                AsyncMock(return_value={"id": "receipt"}),
+            ) as send,
+        ):
+            self.assertTrue(
+                await plugin._send_file("qq:FriendMessage:owner", str(self.artifact), "report.txt")
+            )
+            send.return_value = None
+            with self.assertRaises(RuntimeError):
+                await plugin._send_file("qq:FriendMessage:owner", str(self.artifact), "report.txt")
